@@ -13,15 +13,14 @@ def get_youtube_stream(url):
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
-        # 프로토콜이 https이고 영상(vcodec != none)인 스트림 주소 탐색
         formats = info.get('formats', [])
         for f in reversed(formats):
             if f.get('vcodec') != 'none' and f.get('url', '').startswith('http'):
                 return f['url']
         return info.get('url')
 
-# YouTube 영상 주소 (강의자료 추천 실습 영상)
-youtube_url = "https://www.youtube.com/watch?v=udeQhZHx-00"
+# 쇼츠 영상 링크
+youtube_url = "https://www.youtube.com/shorts/w_xq4RebwiY"
 
 print("📡 YouTube 스트림 URL을 가져오는 중...")
 try:
@@ -33,26 +32,23 @@ except Exception as e:
     print(f"❌ YouTube URL 추출 실패: {e}")
     exit()
 
-# MediaPipe 손 인식 모듈 초기화
-mp_hands = mp.solutions.hands
+# MediaPipe 얼굴 감지(Face Detection) 초기화
+mp_face_detection = mp.solutions.face_detection
 mp_drawing = mp.solutions.drawing_utils
-mp_styles = mp.solutions.drawing_styles
 
-hands = mp_hands.Hands(
-    static_image_mode=False,
-    max_num_hands=2,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5
+face_detection = mp_face_detection.FaceDetection(
+    model_selection=0,  # 0: 2m 이내 근거리 영상용
+    min_detection_confidence=0.5
 )
 
-# YouTube 스트림 연결
+# 비디오 캡처 연결
 cap = cv2.VideoCapture(video_stream_url)
 
 if not cap.isOpened():
     print("❌ YouTube 영상을 열 수 없습니다.")
     exit()
 
-print("📷 YouTube 스트림 재생 시작 - ESC를 눌러 종료합니다.")
+print("📷 YouTube 얼굴 인식 시작 - ESC를 눌러 종료합니다.")
 
 while cap.isOpened():
     success, image = cap.read()
@@ -60,27 +56,21 @@ while cap.isOpened():
         print("⚠️ 영상 스트림이 끝났거나 프레임을 읽지 못했습니다.")
         break
 
-    # 좌우 반전 및 BGR -> RGB 변환
-    image = cv2.flip(image, 1)
+    # 글자가 뒤집히지 않도록 cv2.flip(image, 1) 제거
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    # 손 검출 수행
-    result = hands.process(image_rgb)
+    # 얼굴 검출 수행
+    results = face_detection.process(image_rgb)
 
-    # 손 랜드마크 표시
-    if result.multi_hand_landmarks:
-        for hand_landmarks in result.multi_hand_landmarks:
-            mp_drawing.draw_landmarks(
-                image,
-                hand_landmarks,
-                mp_hands.HAND_CONNECTIONS,
-                mp_styles.get_default_hand_landmarks_style(),
-                mp_styles.get_default_hand_connections_style()
-            )
+    # 얼굴 바운딩 박스 및 랜드마크(눈, 코, 입, 귀 점) 표시
+    if results.detections:
+        for detection in results.detections:
+            mp_drawing.draw_detection(image, detection)
 
-    # 결과 화면 표시
-    cv2.imshow("MediaPipe Hand Detector (YouTube)", image)
+    # 결과 화면 출력
+    cv2.imshow("MediaPipe Face Detection (YouTube)", image)
 
+    # ESC(27) 누르면 종료
     if cv2.waitKey(5) & 0xFF == 27:
         print("👋 종료합니다.")
         break
